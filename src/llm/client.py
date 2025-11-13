@@ -176,6 +176,12 @@ class LLMClient:
         """
         Get response from vision model with image
 
+        NOTE: This is a placeholder for future image classification features.
+        Currently not used by any CLI commands. To enable:
+        1. Add image classification CLI command
+        2. Add image classification prompts
+        3. Install Pillow: pip install pillow>=10.0.0
+
         Args:
             prompt: Text prompt/question about the image
             image_path: Path to local image file

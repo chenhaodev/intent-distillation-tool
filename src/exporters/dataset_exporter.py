@@ -317,7 +317,7 @@ class DatasetExporter:
             "turns" in results[0]
         )
 
-        mode = kwargs.get("mode", "intent-classification")
+        mode = kwargs.get("mode") or "intent-classification"
 
         if format == "json":
             cls.export_to_json(results, output_path)

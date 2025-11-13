@@ -103,22 +103,34 @@ python cli.py export -i dataset.jsonl -o training.json --format alpaca
 # For conversational AI (multi-turn)
 python cli.py export -i conversations.jsonl -o chatbot.json --format sharegpt
 
-# Intent classification from conversations (with context)
+# Intent classification from conversations (with context) - DEFAULT mode
+python cli.py export -i conversations.jsonl -o intent_training.json --format alpaca
+
+# OR explicitly specify mode
 python cli.py export \
   -i conversations.jsonl \
   -o intent_training.json \
   --format alpaca \
   --mode intent-classification
 
+# Full conversation training
+python cli.py export \
+  -i conversations.jsonl \
+  -o conversation_training.json \
+  --format alpaca \
+  --mode conversation
+
 # Train/test split
 python cli.py export -i dataset.jsonl -o training.json --format alpaca --split 0.8
 ```
 
 **Export Modes** (for conversations):
-- `intent-classification`: Extract each user turn as separate intent sample with conversation context
+- `intent-classification` (DEFAULT): Extract each user turn as separate intent sample with conversation context
 - `conversation`: Full conversation as single training sample
 
 **Formats**: `alpaca`, `sharegpt`, `json`, `jsonl`, `csv`
+
+**Note**: For conversation data, if `--mode` is not specified, it defaults to `intent-classification` mode.
 
 ## Configuration
 
@@ -214,7 +226,12 @@ export DEEPSEEK_API_KEY="your_key_here"
 - Top up your DeepSeek account, or
 - Switch to OpenRouter: `--model openrouter`
 
-**Empty Output**:
+**Empty Export / 0 Samples Exported**:
+- For conversation data, ensure you're using `--format alpaca` (defaults to `intent-classification` mode)
+- If still getting 0 samples, explicitly specify `--mode intent-classification`
+- Check that input file has correct structure with `conversation_id` and `turns` fields
+
+**Empty Output During Distillation**:
 - Check API key is valid
 - Ensure topic is well-defined
 

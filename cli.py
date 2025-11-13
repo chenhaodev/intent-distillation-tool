@@ -8,7 +8,6 @@ import click
 import logging
 import json
 from pathlib import Path
-from typing import Optional
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from rich.tree import Tree

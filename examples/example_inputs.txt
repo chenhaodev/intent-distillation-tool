@@ -1,10 +1,25 @@
-How do I install Python on Ubuntu?
-What's the weather like today?
-Write a poem about artificial intelligence
-Debug this error in my code
-Can you summarize this article for me?
-Translate 'hello world' to Spanish
-What is the capital of France?
-Generate an image of a sunset
-Calculate the square root of 144
-Let's talk about your day
+# Example user queries for intent classification training
+
+# Customer Support - Account Management
+How do I reset my password?
+I forgot my username
+Can I change my email address?
+
+# Customer Support - Billing
+What's my current balance?
+I was charged twice
+How do I update my payment method?
+
+# Medical Support - Symptom Assessment
+I have a persistent headache
+My child has a fever of 102°F
+What could cause chest pain?
+
+# Medical Support - Specialist Referral
+Which doctor should I see for back pain?
+Do I need to see a cardiologist?
+
+# Technical Support - Troubleshooting
+My app keeps crashing
+The website won't load
+I'm getting an error message
