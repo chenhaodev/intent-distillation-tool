@@ -17,6 +17,7 @@ from rich.table import Table
 from src.llm.client import LLMClient
 from src.distillers.intent_tag_distiller import IntentTagDistiller, IntentNode
 from src.distillers.intent_question_distiller import IntentQuestionDistiller
+from src.distillers.intent_conversation_distiller import IntentConversationDistiller
 from src.exporters.dataset_exporter import DatasetExporter
 from src.utils.config_loader import load_config, validate_config
 
@@ -334,12 +335,139 @@ def distill_auto(ctx, topic, levels, tags_per_level, questions_per_tag, leaf_onl
 
 
 @cli.command()
+@click.option("--topic", "-t", required=True, help="Root topic/domain")
+@click.option("--levels", default=2, help="Taxonomy depth")
+@click.option("--tags-per-level", default=5, help="Tags per level")
+@click.option("--conversations-per-tag", default=5, help="Conversations per intent")
+@click.option("--turns-per-conversation", default=4, help="Turns per conversation (user+assistant pairs)")
+@click.option("--transition-rate", default=0.3, type=float, help="Intent transition probability (0-1)")
+@click.option("--leaf-only", is_flag=True, default=True, help="Only generate for leaf intents")
+@click.option("--output", "-o", required=True, help="Output file path")
+@click.option("--language", "-l", default="en", help="Language (en/zh)")
+@click.option("--model", "-m", default="deepseek", help="Model to use")
+@click.option("--export-taxonomy", help="Export taxonomy tree to file")
+@click.option("--scenario", help="Custom conversation scenario description")
+@click.pass_context
+def distill_conversations(ctx, topic, levels, tags_per_level, conversations_per_tag,
+                         turns_per_conversation, transition_rate, leaf_only, output,
+                         language, model, export_taxonomy, scenario):
+    """Generate multi-turn conversations with intent transitions"""
+    config = ctx.obj
+
+    # Initialize LLM client
+    llm_config = config["llm"].get(model)
+    if not llm_config:
+        console.print(f"[red]Model '{model}' not configured[/red]")
+        raise click.Abort()
+
+    llm_client = LLMClient(llm_config)
+
+    # Calculate expected counts
+    total_tags = sum(tags_per_level ** i for i in range(1, levels + 1))
+    leaf_tags = tags_per_level ** levels
+    total_conversations = (leaf_tags if leaf_only else total_tags) * conversations_per_tag
+    avg_turns_per_conv = turns_per_conversation * 2  # user + assistant
+
+    console.print("\n[bold cyan]Multi-Turn Conversation Distillation[/bold cyan]")
+    console.print(f"[dim]{'='*60}[/dim]")
+    console.print(f"Topic: [yellow]{topic}[/yellow]")
+    console.print(f"Taxonomy: {levels} levels × {tags_per_level} tags/level")
+    console.print(f"Expected: ~{total_tags} total intents, ~{leaf_tags} leaf intents")
+    console.print(f"Conversations: {conversations_per_tag} per intent")
+    console.print(f"Turns: {turns_per_conversation} turns per conversation")
+    console.print(f"Intent transitions: {int(transition_rate * 100)}% probability")
+    console.print(f"Total: [green]~{total_conversations} conversations[/green]")
+    console.print(f"[dim]{'='*60}[/dim]\n")
+
+    try:
+        # Stage 1: Build taxonomy
+        console.print("[bold]Stage 1/2: Building Intent Taxonomy[/bold]")
+
+        tag_distiller = IntentTagDistiller(llm_client, language)
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console
+        ) as progress:
+            task = progress.add_task(f"Building {levels}-level taxonomy...", total=levels)
+
+            root = tag_distiller.build_taxonomy(
+                root_topic=topic,
+                levels=levels,
+                tags_per_level=tags_per_level
+            )
+
+            progress.update(task, completed=levels)
+
+        console.print("\n[green]✓ Taxonomy built successfully![/green]\n")
+
+        tree = Tree(f"[bold]{root.name}[/bold]")
+        _build_tree_display(tree, root, max_depth=3)
+        console.print(tree)
+
+        # Export taxonomy if requested
+        if export_taxonomy:
+            taxonomy_data = tag_distiller.export_tree(root)
+            with open(export_taxonomy, "w") as f:
+                json.dump(taxonomy_data, f, indent=2, ensure_ascii=False)
+            console.print(f"\n[dim]Taxonomy saved to {export_taxonomy}[/dim]")
+
+        # Stage 2: Generate conversations
+        console.print(f"\n[bold]Stage 2/2: Generating Multi-Turn Conversations[/bold]")
+
+        conversation_distiller = IntentConversationDistiller(llm_client, language)
+
+        all_conversations = conversation_distiller.distill_conversations_for_tree(
+            root_node=root,
+            conversations_per_intent=conversations_per_tag,
+            turns_per_conversation=turns_per_conversation,
+            transition_rate=transition_rate,
+            leaf_only=leaf_only,
+            scenario=scenario
+        )
+
+        # Save results
+        console.print(f"\n[bold]Saving Results[/bold]")
+
+        with open(output, "w") as f:
+            for conv in all_conversations:
+                f.write(json.dumps(conv, ensure_ascii=False) + "\n")
+
+        # Display summary
+        console.print("\n[green]✓ Conversation Distillation Complete![/green]\n")
+
+        summary_table = Table(title="Summary")
+        summary_table.add_column("Metric", style="cyan")
+        summary_table.add_column("Count", style="green")
+
+        summary_table.add_row("Total Intents", str(total_tags))
+        summary_table.add_row("Leaf Intents", str(leaf_tags))
+        summary_table.add_row("Conversations Generated", str(len(all_conversations)))
+        summary_table.add_row("Avg Turns per Conversation", str(avg_turns_per_conv))
+        summary_table.add_row("Output File", output)
+
+        console.print(summary_table)
+
+        console.print(f"\n[dim]Use 'python cli.py export -i {output} -o training.json --format sharegpt' for ShareGPT format[/dim]\n")
+
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        import traceback
+        traceback.print_exc()
+        raise click.Abort()
+
+
+@cli.command()
 @click.option("--input", "-i", required=True, help="Input classification results file")
 @click.option("--output", "-o", required=True, help="Output dataset file")
 @click.option("--format", "-f", default="alpaca", help="Export format (alpaca/sharegpt/json/jsonl/csv)")
 @click.option("--split", type=float, help="Train/test split ratio (e.g., 0.8)")
 @click.option("--system-prompt", help="System prompt for training data")
-def export(input, output, format, split, system_prompt):
+@click.option("--mode", help="Export mode for conversations (intent-classification/conversation)")
+def export(input, output, format, split, system_prompt, mode):
     """Export distillation results to SLM training format"""
 
     # Load results
@@ -361,14 +489,14 @@ def export(input, output, format, split, system_prompt):
         train_output = output.replace(".", "_train.")
         test_output = output.replace(".", "_test.")
 
-        DatasetExporter.export(train_results, train_output, format, system_prompt=system_prompt or "")
-        DatasetExporter.export(test_results, test_output, format, system_prompt=system_prompt or "")
+        DatasetExporter.export(train_results, train_output, format, system_prompt=system_prompt or "", mode=mode)
+        DatasetExporter.export(test_results, test_output, format, system_prompt=system_prompt or "", mode=mode)
 
         console.print(f"[green]Train set ({len(train_results)} samples): {train_output}[/green]")
         console.print(f"[green]Test set ({len(test_results)} samples): {test_output}[/green]")
     else:
         # Export all
-        DatasetExporter.export(results, output, format, system_prompt=system_prompt or "")
+        DatasetExporter.export(results, output, format, system_prompt=system_prompt or "", mode=mode)
         console.print(f"[green]Exported {len(results)} samples to {output}[/green]")
 
 
