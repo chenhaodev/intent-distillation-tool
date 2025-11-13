@@ -1,0 +1,87 @@
+llm:
+  # DeepSeek configuration for text/intent classification
+  deepseek:
+    api_key: "${DEEPSEEK_API_KEY}"  # Set via environment variable
+    base_url: "https://api.deepseek.com/v1"
+    model: "deepseek-chat"
+    temperature: 0.7
+    max_tokens: 2048
+    top_p: 0.9
+
+  # OpenRouter configuration for vision models (InternVL3-78b)
+  openrouter:
+    api_key: "${OPENROUTER_API_KEY}"  # Set via environment variable
+    base_url: "https://openrouter.ai/api/v1"
+    model: "opengvlab/internvl3-78b"
+    temperature: 0.7
+    max_tokens: 4096
+    top_p: 0.9
+
+# Intent classification labels
+intent_labels:
+  - label: "question_answering"
+    description: "User is asking a question and expects an answer"
+  - label: "information_retrieval"
+    description: "User wants to retrieve or search for specific information"
+  - label: "task_execution"
+    description: "User wants to execute a specific task, action, or operation"
+  - label: "creative_generation"
+    description: "User wants to generate creative content like stories, poems, or images"
+  - label: "code_assistance"
+    description: "User needs help with coding, debugging, or technical problems"
+  - label: "data_analysis"
+    description: "User wants to analyze, process, or understand data"
+  - label: "translation"
+    description: "User wants to translate text between languages"
+  - label: "summarization"
+    description: "User wants to summarize long text or documents"
+  - label: "conversation"
+    description: "User wants to have a casual conversation or chat"
+  - label: "reasoning"
+    description: "User wants logical reasoning, problem-solving, or mathematical calculations"
+
+# Image classification labels
+image_labels:
+  - label: "document"
+    description: "Images containing text documents, PDFs, or scanned papers"
+  - label: "diagram"
+    description: "Charts, diagrams, flowcharts, mind maps, or technical illustrations"
+  - label: "photo"
+    description: "Real-world photographs, natural scenes, or people"
+  - label: "ui_screenshot"
+    description: "User interface screenshots, application screens, or web pages"
+  - label: "code_snippet"
+    description: "Images containing source code or terminal/console output"
+  - label: "infographic"
+    description: "Infographics, data visualizations, or information graphics"
+  - label: "meme"
+    description: "Memes, comics, or humorous images with text"
+  - label: "logo"
+    description: "Logos, icons, or brand imagery"
+  - label: "product"
+    description: "Product images, e-commerce photos, or item listings"
+  - label: "other"
+    description: "Images that don't fit into other categories"
+
+# Export settings
+export:
+  format: "jsonl"  # json, jsonl, or csv
+  output_dir: "./output"
+  include_confidence: true
+  include_reasoning: true
+  include_alternatives: true
+  timestamp_format: "%Y-%m-%d %H:%M:%S"
+
+# Processing settings
+processing:
+  batch_size: 10
+  max_workers: 4
+  retry_attempts: 3
+  retry_delay: 1.0  # seconds
+  timeout: 30  # seconds per request
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "classification.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

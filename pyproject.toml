@@ -1,0 +1,34 @@
+[tool.poetry]
+name = "classification-tool-cli"
+version = "0.1.0"
+description = "A Python CLI tool for intent and image classification using DeepSeek and OpenRouter APIs"
+authors = ["Your Name <your.email@example.com>"]
+license = "AGPL-3.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+click = "^8.1.0"
+openai = "^1.0.0"
+pyyaml = "^6.0"
+pydantic = "^2.0.0"
+pillow = "^10.0.0"
+httpx = "^0.24.0"
+rich = "^13.0.0"
+tqdm = "^4.66.0"
+python-dotenv = "^1.0.0"
+aiohttp = "^3.9.0"
+tenacity = "^8.2.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.0.0"
+black = "^23.0.0"
+flake8 = "^6.0.0"
+mypy = "^1.0.0"
+
+[tool.poetry.scripts]
+classify-cli = "cli:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
