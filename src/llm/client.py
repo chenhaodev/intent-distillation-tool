@@ -2,7 +2,6 @@
 LLM Client for DeepSeek and OpenRouter APIs
 Based on easy-dataset's LLM client architecture
 """
-import base64
 import json
 from typing import Dict, List, Optional, Union, Any
 from openai import OpenAI
@@ -163,74 +162,6 @@ class LLMClient:
         except json.JSONDecodeError:
             # Fallback: extract JSON from markdown code blocks
             return self._extract_json_from_text(response_text)
-
-    def get_vision_response(
-        self,
-        prompt: str,
-        image_path: Optional[str] = None,
-        image_base64: Optional[str] = None,
-        image_url: Optional[str] = None,
-        system_prompt: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """
-        Get response from vision model with image
-
-        NOTE: This is a placeholder for future image classification features.
-        Currently not used by any CLI commands. To enable:
-        1. Add image classification CLI command
-        2. Add image classification prompts
-        3. Install Pillow: pip install pillow>=10.0.0
-
-        Args:
-            prompt: Text prompt/question about the image
-            image_path: Path to local image file
-            image_base64: Base64-encoded image data
-            image_url: URL to image
-            system_prompt: Optional system prompt
-            **kwargs: Additional parameters
-
-        Returns:
-            Dict with 'text', 'reasoning' (if available)
-        """
-        # Prepare image data
-        if image_path:
-            with open(image_path, "rb") as f:
-                image_data = base64.b64encode(f.read()).decode("utf-8")
-                # Detect mime type from extension
-                ext = image_path.lower().split(".")[-1]
-                mime_type = f"image/{ext if ext in ['jpeg', 'jpg', 'png', 'gif', 'webp'] else 'jpeg'}"
-                image_content = f"data:{mime_type};base64,{image_data}"
-        elif image_base64:
-            # Assume it's already in data URI format or add it
-            if image_base64.startswith("data:"):
-                image_content = image_base64
-            else:
-                image_content = f"data:image/jpeg;base64,{image_base64}"
-        elif image_url:
-            image_content = image_url
-        else:
-            raise ValueError("Must provide image_path, image_base64, or image_url")
-
-        # Build messages with image
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-
-        messages.append({
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": image_content}}
-            ]
-        })
-
-        result = self.chat(messages, **kwargs)
-        return {
-            "text": result["text"],
-            "reasoning": result.get("reasoning"),
-            "answer": result["text"]  # Alias for compatibility
-        }
 
     @staticmethod
     def _extract_json_from_text(text: str) -> Dict[str, Any]:

@@ -45,8 +45,10 @@ classification.log
 output/
 *.json
 *.jsonl
-*.csv
 !config.yaml
+
+# Keep example source data but ignore generated outputs
+!examples/data/medical_dialogues.csv
 
 # OS
 .DS_Store

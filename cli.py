@@ -17,6 +17,9 @@ from src.llm.client import LLMClient
 from src.distillers.intent_tag_distiller import IntentTagDistiller, IntentNode
 from src.distillers.intent_question_distiller import IntentQuestionDistiller
 from src.distillers.intent_conversation_distiller import IntentConversationDistiller
+from src.distillers.medical_intent_tagger import MedicalIntentTagger
+from src.distillers.medical_taxonomy_builder import MedicalTaxonomyBuilder
+from src.parsers.medical_dialog_parser import MedicalDialogParser
 from src.exporters.dataset_exporter import DatasetExporter
 from src.utils.config_loader import load_config, validate_config
 
@@ -451,6 +454,144 @@ def distill_conversations(ctx, topic, levels, tags_per_level, conversations_per_
         console.print(summary_table)
 
         console.print(f"\n[dim]Use 'python cli.py export -i {output} -o training.json --format sharegpt' for ShareGPT format[/dim]\n")
+
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        import traceback
+        traceback.print_exc()
+        raise click.Abort()
+
+
+@cli.command()
+@click.option("--input", "-i", required=True, help="Input medical dialog CSV file")
+@click.option("--output", "-o", required=True, help="Output tagged conversations file (JSONL)")
+@click.option("--limit", "-n", type=int, help="Limit number of conversations to process")
+@click.option("--language", "-l", default="en", help="Language (en/zh)")
+@click.option("--model", "-m", default="deepseek", help="Model to use")
+@click.pass_context
+def import_medical_dialogs(ctx, input, output, limit, language, model):
+    """Import real-world medical dialogs and generate intent tags"""
+    config = ctx.obj
+
+    # Initialize LLM client
+    llm_config = config["llm"].get(model)
+    if not llm_config:
+        console.print(f"[red]Model '{model}' not configured[/red]")
+        raise click.Abort()
+
+    llm_client = LLMClient(llm_config)
+
+    console.print("\n[bold cyan]Medical Dialog Import & Intent Tagging[/bold cyan]")
+    console.print(f"[dim]{'='*60}[/dim]")
+    console.print(f"Input: [yellow]{input}[/yellow]")
+    console.print(f"Output: [yellow]{output}[/yellow]")
+    console.print(f"[dim]{'='*60}[/dim]\n")
+
+    try:
+        # Stage 1: Parse medical dialogs
+        console.print("[bold]Stage 1/2: Parsing Medical Dialogs[/bold]")
+
+        parser = MedicalDialogParser()
+
+        with console.status("[bold green]Loading conversations..."):
+            conversations = parser.parse_csv(input)
+
+            if limit:
+                conversations = conversations[:limit]
+
+            stats = parser.get_statistics(conversations)
+
+        console.print(f"[green]✓ Loaded {stats['total_conversations']} conversations[/green]")
+        console.print(f"  • Total turns: {stats['total_turns']}")
+        console.print(f"  • User turns: {stats['user_turns']}")
+        console.print(f"  • Avg turns per conversation: {stats['avg_turns_per_conversation']:.1f}")
+        console.print(f"  • Turn range: {stats['min_turns']}-{stats['max_turns']}\n")
+
+        # Stage 2: Build intent taxonomy
+        console.print("[bold]Stage 2/3: Building Intent Taxonomy[/bold]")
+
+        taxonomy_builder = MedicalTaxonomyBuilder(llm_client, language)
+
+        with console.status("[bold green]Analyzing conversations to build taxonomy..."):
+            taxonomy_root = taxonomy_builder.build_taxonomy_from_conversations(
+                conversations,
+                sample_size=min(10, len(conversations))
+            )
+
+        console.print("[green]✓ Intent taxonomy built[/green]")
+        console.print("\n[bold]Intent Taxonomy:[/bold]")
+
+        # Display taxonomy tree
+        tree = Tree(f"[bold]{taxonomy_root.name}[/bold]")
+        _build_tree_display(tree, taxonomy_root, max_depth=3)
+        console.print(tree)
+        console.print()
+
+        # Stage 3: Generate intent tags
+        console.print("[bold]Stage 3/3: Generating Intent Tags[/bold]")
+
+        tagger = MedicalIntentTagger(llm_client, language, taxonomy=taxonomy_root)
+
+        tagged_conversations = []
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console
+        ) as progress:
+            task = progress.add_task("Tagging conversations...", total=len(conversations))
+
+            for conv in conversations:
+                try:
+                    tagged = tagger.tag_conversation(conv)
+                    tagged_conversations.append(tagged)
+                    progress.advance(task)
+                except Exception as e:
+                    console.print(f"[yellow]Warning: Failed for conversation {conv.get('conversation_id')}: {e}[/yellow]")
+                    progress.advance(task)
+
+        # Save results
+        console.print(f"\n[bold]Saving Results[/bold]")
+
+        with open(output, "w") as f:
+            for conv in tagged_conversations:
+                f.write(json.dumps(conv, ensure_ascii=False) + "\n")
+
+        # Display summary
+        console.print("\n[green]✓ Intent Tagging Complete![/green]\n")
+
+        # Show sample
+        if tagged_conversations:
+            console.print("[bold]Sample Tagged Conversation:[/bold]\n")
+            sample = tagged_conversations[0]
+            console.print(f"ID: {sample['conversation_id']}")
+            console.print(f"Primary Intent: [cyan]{sample.get('primary_intent', 'N/A')}[/cyan]")
+            console.print(f"All Intents: {', '.join(sample.get('all_intents', [])[:5])}")
+            console.print(f"\nFirst few turns:")
+
+            for i, turn in enumerate(sample['turns'][:6]):
+                role_emoji = "👤" if turn['role'] == 'user' else "👨‍⚕️"
+                content_preview = turn['content'][:80] + "..." if len(turn['content']) > 80 else turn['content']
+
+                if turn['role'] == 'user':
+                    intent = turn.get('intent', 'N/A')
+                    console.print(f"  {role_emoji} [User - {intent}]: {content_preview}")
+                else:
+                    console.print(f"  {role_emoji} [Doctor]: {content_preview}")
+
+        summary_table = Table(title="Summary")
+        summary_table.add_column("Metric", style="cyan")
+        summary_table.add_column("Count", style="green")
+
+        summary_table.add_row("Conversations Tagged", str(len(tagged_conversations)))
+        summary_table.add_row("Output File", output)
+
+        console.print("\n")
+        console.print(summary_table)
+
+        console.print(f"\n[dim]Use 'python cli.py export -i {output} -o training.json --format alpaca' to export for training[/dim]\n")
 
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")

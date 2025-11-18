@@ -49,15 +49,6 @@ class DatasetExporter:
                     "system": system_prompt
                 })
 
-            # For image classification
-            elif "category" in result:
-                alpaca_data.append({
-                    "instruction": "Classify the category of the image.",
-                    "input": f"Image: {result['image_path']}",
-                    "output": f"Category: {result['category']}\nConfidence: {result['confidence']}\nReasoning: {result['reasoning']}\nScene: {result.get('scene_description', '')}",
-                    "system": system_prompt
-                })
-
         # Write to file
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(alpaca_data, f, ensure_ascii=False, indent=2)
@@ -109,17 +100,6 @@ class DatasetExporter:
                 messages.append({
                     "role": "assistant",
                     "content": f"The intent is '{result['intent']}' with confidence {result['confidence']}. {result['reasoning']}"
-                })
-
-            # For image classification
-            elif "category" in result:
-                messages.append({
-                    "role": "user",
-                    "content": f"Classify this image: {result['image_path']}"
-                })
-                messages.append({
-                    "role": "assistant",
-                    "content": f"The category is '{result['category']}' with confidence {result['confidence']}. {result['reasoning']}"
                 })
 
             sharegpt_data.append({"messages": messages})

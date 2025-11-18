@@ -1,34 +1,19 @@
 # Intent Distillation Tool
 
-> A knowledge distillation tool & data-generator for intent classification. Core idea derived from [EasyDataSet](https://github.com/ConardLi/easy-dataset).
-
-Generate thousands of high-quality training samples for intent classification models - no manual data collection needed.
+> Generate high-quality training data for intent classification models from synthetic questions or real-world conversations.
 
 ## Quick Start
 
 ```bash
 # Install
 pip install -r requirements.txt
-
-# Set API key
 export DEEPSEEK_API_KEY="your_key_here"
 
-# Generate single-turn questions
-python cli.py distill-auto \
-  --topic "Customer Support" \
-  --levels 3 \
-  --tags-per-level 5 \
-  --questions-per-tag 20 \
-  --output dataset.jsonl
+# Generate synthetic questions
+python cli.py distill-auto --topic "Customer Support" --output dataset.jsonl
 
-# OR generate multi-turn conversations
-python cli.py distill-conversations \
-  --topic "Customer Support" \
-  --levels 2 \
-  --tags-per-level 5 \
-  --conversations-per-tag 5 \
-  --turns-per-conversation 4 \
-  --output conversations.jsonl
+# Import & tag real medical dialogs
+bash examples/multi-turn-med-dialog.sh
 
 # Export for training
 python cli.py export -i dataset.jsonl -o training.json --format alpaca
@@ -36,18 +21,15 @@ python cli.py export -i dataset.jsonl -o training.json --format alpaca
 
 ## Features
 
-- **Single-turn questions**: Generate diverse questions for each intent
-- **Multi-turn conversations**: Generate realistic conversations with intent transitions
-- **Auto taxonomy building**: Hierarchical intent classification trees
-- **Multiple export formats**: Alpaca, ShareGPT, JSON, JSONL, CSV
-- **Bilingual support**: English and Chinese
-- **Intent transitions**: Natural topic changes in conversations
+- **Synthetic Data Generation**: Auto-generate questions with hierarchical intent taxonomy
+- **Real-World Dialog Tagging**: Import and tag multi-turn conversations with LLM-powered intent labels
+- **Domain-Specific Taxonomy**: Build custom intent hierarchies from real conversations
+- **Multiple Export Formats**: Alpaca, ShareGPT, JSON, JSONL, CSV
+- **Bilingual Support**: English and Chinese
 
-## Commands
+## Main Commands
 
-### 1. Single-Turn Questions
-
-Generate individual questions for each intent:
+### 1. Generate Synthetic Questions
 
 ```bash
 python cli.py distill-auto \
@@ -58,182 +40,111 @@ python cli.py distill-auto \
   --output dataset.jsonl
 ```
 
-**Output**: 2,500 labeled questions (125 intents × 20 questions)
-
-### 2. Multi-Turn Conversations (NEW!)
-
-Generate realistic multi-turn conversations with intent transitions:
+### 2. Import & Tag Real-World Dialogs
 
 ```bash
-python cli.py distill-conversations \
-  --topic "Customer Support" \
-  --levels 2 \
-  --tags-per-level 5 \
-  --conversations-per-tag 5 \
-  --turns-per-conversation 4 \
-  --transition-rate 0.3 \
-  --output conversations.jsonl
+python cli.py import-medical-dialogs \
+  --input examples/data/medical_dialogues.csv \
+  --output tagged.jsonl \
+  --limit 10
 ```
 
-**Key Parameters**:
-- `--turns-per-conversation`: Number of back-and-forth exchanges (default: 4)
-- `--transition-rate`: Probability of switching to related intent (0-1, default: 0.3)
-- `--conversations-per-tag`: How many conversations per intent (default: 5)
+**How it works** (3-stage pipeline):
+1. **Parse** - Extract conversations from source format
+2. **Build Taxonomy** - LLM analyzes conversations to create domain-specific intent hierarchy
+3. **Tag Intents** - Apply taxonomy to label each turn with hierarchical intent tags
 
-**Output**: 125 conversations with natural intent transitions
-
-**Example conversation**:
+**Output**:
+```json
+{
+  "conversation_id": "medval_1",
+  "turns": [
+    {"role": "assistant", "content": "What brings you in?"},
+    {"role": "user", "content": "I have chest pain",
+     "intent": "Symptom Reporting",
+     "intent_path": "Medical Consultation -> Chief Complaint -> Symptom Reporting"}
+  ]
+}
 ```
-User: How do I reset my password? [Intent: Password Reset]
-Assistant: Click 'Forgot Password' on the login page...
-User: Is my account secure after reset? [Intent: Account Security] ← transition
-Assistant: Yes, we'll send a verification email...
-User: Can I enable two-factor authentication? [Intent: 2FA Setup] ← transition
-Assistant: Absolutely! Go to Settings > Security...
-```
 
-### 3. Export
-
-Export to various training formats:
+### 3. Export for Training
 
 ```bash
-# For intent classification (single-turn)
-python cli.py export -i dataset.jsonl -o training.json --format alpaca
+# Intent classification (with conversation context)
+python cli.py export -i tagged.jsonl -o training.json --format alpaca
 
-# For conversational AI (multi-turn)
-python cli.py export -i conversations.jsonl -o chatbot.json --format sharegpt
-
-# Intent classification from conversations (with context) - DEFAULT mode
-python cli.py export -i conversations.jsonl -o intent_training.json --format alpaca
-
-# OR explicitly specify mode
-python cli.py export \
-  -i conversations.jsonl \
-  -o intent_training.json \
-  --format alpaca \
-  --mode intent-classification
-
-# Full conversation training
-python cli.py export \
-  -i conversations.jsonl \
-  -o conversation_training.json \
-  --format alpaca \
-  --mode conversation
+# Full conversations
+python cli.py export -i tagged.jsonl -o training.json --format sharegpt
 
 # Train/test split
-python cli.py export -i dataset.jsonl -o training.json --format alpaca --split 0.8
+python cli.py export -i tagged.jsonl -o training.json --format alpaca --split 0.8
 ```
 
-**Export Modes** (for conversations):
-- `intent-classification` (DEFAULT): Extract each user turn as separate intent sample with conversation context
-- `conversation`: Full conversation as single training sample
+## Dataset Integration Roadmap
 
-**Formats**: `alpaca`, `sharegpt`, `json`, `jsonl`, `csv`
+### Current Support
+- ✅ **MedVAL-Bench** - Expert-annotated medical dialogues (Physionet)
+  - Format: `dialogue2note` CSV with doctor-patient conversations
+  - Parser: `src/parsers/medical_dialog_parser.py`
 
-**Note**: For conversation data, if `--mode` is not specified, it defaults to `intent-classification` mode.
+### Planned Datasets
+
+#### Phase 1: Medical Domain
+- 🔄 **ACI-Bench** - AI-patient communication benchmark
+  - Multi-turn clinical conversations
+  - Focus: Patient education, symptom assessment
+
+- 🔄 **MIMIC-IV Discharge Notes** - Clinical notes from ICU patients
+  - Format: Unstructured discharge summaries
+  - Focus: Clinical reasoning, treatment planning
+
+#### Phase 2: General Dialog
+- 📋 **MultiWOZ** - Multi-domain task-oriented dialogs
+- 📋 **SGD** - Schema-Guided Dialog dataset
+- 📋 **DSTC** - Dialog State Tracking Challenge datasets
+
+### Adding New Datasets
+
+1. Create parser in `src/parsers/` (see `medical_dialog_parser.py` as template)
+2. Implement `parse_csv()` or `parse_json()` returning conversation dict
+3. Add CLI command in `cli.py`
+4. Add example script in `examples/`
+
+**Conversation format**:
+```python
+{
+    "conversation_id": "unique_id",
+    "source": "dataset_name",
+    "domain": "medical|general|...",
+    "turns": [
+        {"role": "user|assistant", "content": "..."},
+        ...
+    ]
+}
+```
 
 ## Configuration
 
-```bash
-# Option 1: Environment variable
-export DEEPSEEK_API_KEY="your_key_here"
-
-# Option 2: Edit config.yaml
+```yaml
+# config.yaml
 llm:
   deepseek:
     api_key: "${DEEPSEEK_API_KEY}"
     model: "deepseek-chat"
 ```
 
-## Output Examples
-
-### Single-Turn Question
-
-**Raw Output**:
-```json
-{
-  "question": "How do I reset my password?",
-  "intent": "Password Reset",
-  "intent_path": "Customer Support -> Account Management -> Password Reset"
-}
-```
-
-**Alpaca Format**:
-```json
-{
-  "instruction": "Classify the intent of the following user query.",
-  "input": "How do I reset my password?",
-  "output": "Password Reset"
-}
-```
-
-### Multi-Turn Conversation
-
-**Raw Output**:
-```json
-{
-  "conversation_id": "conv_20251113_1234",
-  "primary_intent": "Password Reset",
-  "all_intents": ["Password Reset", "Account Security"],
-  "turns": [
-    {"role": "user", "content": "How do I reset my password?", "intent": "Password Reset"},
-    {"role": "assistant", "content": "Click 'Forgot Password' on the login page..."},
-    {"role": "user", "content": "Is my account secure?", "intent": "Account Security"},
-    {"role": "assistant", "content": "Yes, we'll send verification..."}
-  ],
-  "transition_points": [3]
-}
-```
-
-**ShareGPT Format**:
-```json
-{
-  "messages": [
-    {"role": "user", "content": "How do I reset my password?"},
-    {"role": "assistant", "content": "Click 'Forgot Password'..."},
-    {"role": "user", "content": "Is my account secure?"},
-    {"role": "assistant", "content": "Yes, we'll send verification..."}
-  ]
-}
-```
-
-**Alpaca Format (intent-classification mode)**:
-```json
-{
-  "instruction": "Given the conversation context, classify the intent of the user's current message.",
-  "input": "Previous conversation:\nUser: How do I reset my password?\nAssistant: Click 'Forgot Password'...\n\nCurrent message:\nIs my account secure?",
-  "output": "Account Security"
-}
-```
-
 ## Use Cases
 
-- **Intent Classification**: Train SLMs to classify user queries
-- **Conversational AI**: Train chatbots with multi-turn dialogue data
-- **Task Routing**: Route queries to specialized agents based on intent
-- **Context-Aware Classification**: Train models that understand conversation history
-- **Multi-Domain**: Generate datasets for multiple domains
-- **Bilingual**: Support both English and Chinese
+- **Medical AI**: Train intent classifiers on doctor-patient conversations
+- **Chatbots**: Generate training data for conversational agents
+- **Task Routing**: Classify user queries to route to specialized systems
+- **Context-Aware Models**: Train on multi-turn dialogs with conversation history
 
-## Troubleshooting
+## Examples
 
-**API Key Error**:
-```bash
-export DEEPSEEK_API_KEY="your_key_here"
-```
-
-**Insufficient Balance**:
-- Top up your DeepSeek account, or
-- Switch to OpenRouter: `--model openrouter`
-
-**Empty Export / 0 Samples Exported**:
-- For conversation data, ensure you're using `--format alpaca` (defaults to `intent-classification` mode)
-- If still getting 0 samples, explicitly specify `--mode intent-classification`
-- Check that input file has correct structure with `conversation_id` and `turns` fields
-
-**Empty Output During Distillation**:
-- Check API key is valid
-- Ensure topic is well-defined
+See `examples/` directory:
+- `multi-turn-med-dialog.sh` - Complete pipeline for medical dialog tagging
+- `example_inputs.txt` - Sample queries for synthetic generation
 
 ## License
 
@@ -241,6 +152,5 @@ MIT License
 
 ## Credits
 
-- Core methodology from [EasyDataSet](https://github.com/ConardLi/easy-dataset)
-- Multi-turn conversation prompts adapted from EasyDataSet's multiTurnConversation.js
+- Methodology from [EasyDataSet](https://github.com/ConardLi/easy-dataset)
 - Built with Click, Rich, and OpenAI

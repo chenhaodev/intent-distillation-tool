@@ -81,7 +81,7 @@ def validate_config(config: Dict[str, Any]) -> bool:
     Raises:
         ValueError if invalid
     """
-    required_keys = ["llm", "intent_labels", "image_labels", "export"]
+    required_keys = ["llm", "export"]
 
     for key in required_keys:
         if key not in config:
